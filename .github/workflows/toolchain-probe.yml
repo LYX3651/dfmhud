@@ -1,0 +1,31 @@
+name: toolchain-probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential clang lld libc++-dev libc++abi-dev \
+            libssl-dev libxml2-dev libplist-dev pkg-config xxd file
+
+      - name: theos + sdk
+        run: |
+          export THEOS=$HOME/theos
+          git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
+          mkdir -p "$THEOS/sdks"
+          git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
+          cp -R /tmp/sdks/*.sdk "$THEOS/sdks/" 2>/dev/null || true
+          echo "=== SDKs ==="
+          ls "$THEOS/sdks"
+          echo "=== 每个 SDK 大小 ==="
+          du -sh "$THEOS/sdks"/* 2>/dev/null | head -20
+
+      - name: clang 能力
+        run: bash tools/linux-check.sh 2>&1 | head -60
