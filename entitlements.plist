@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- === TrollStore 下跨进程读写的核心三件套 === -->
+	<key>task_for_pid-allow</key>
+	<true/>
+	<key>platform-application</key>
+	<true/>
+	<key>com.apple.private.security.no-sandbox</key>
+	<true/>
+
+	<!-- 应用容器 / 数据目录（读取目标 app 容器用） -->
+	<key>com.apple.private.security.storage.AppBundles</key>
+	<true/>
+	<key>com.apple.private.security.storage.AppDataContainers</key>
+	<true/>
+
+	<!-- 悬浮窗必须：在别的 App 之上挂窗口 -->
+	<key>com.apple.springboard.accessibility-window-hosting</key>
+	<true/>
+	<key>com.apple.springboard.launchapplications</key>
+	<true/>
+	<key>com.apple.springboard.ui.client</key>
+	<true/>
+
+	<!-- 前台切换 / 进程管理 -->
+	<key>com.apple.frontboard.debugapplications</key>
+	<true/>
+	<key>com.apple.private.persona-mgmt</key>
+	<true/>
+	<key>com.apple.private.memorystatus</key>
+	<true/>
+	<key>com.apple.system-task-ports</key>
+	<true/>
+
+	<!-- GPU 用户态客户端（kfd 的 PUAF 依赖 IOSurface/IOGPU） -->
+	<key>com.apple.security.iokit-user-client-class</key>
+	<array>
+		<string>IOSurfaceRootUserClient</string>
+		<string>AGXDeviceUserClient</string>
+		<string>IOPMPowerSourceClient</string>
+	</array>
+
+	<!-- Mach 服务：自己的 HUD 通信命名空间 -->
+	<key>com.apple.security.exception.mach-register.global-name</key>
+	<array>
+		<string>com.dfmhud.menu.events</string>
+	</array>
+	<key>com.apple.security.exception.mach-lookup.global-name</key>
+	<array>
+		<string>com.dfmhud.menu.events</string>
+	</array>
+
+	<!-- HID：如果需要合成触摸 -->
+	<key>com.apple.private.hid.client.event-monitor</key>
+	<true/>
+	<key>com.apple.private.hid.client.event-dispatch</key>
+	<true/>
+
+	<!-- 调试/日志 -->
+	<key>get-task-allow</key>
+	<true/>
+	<key>com.apple.private.sysdiagnose</key>
+	<true/>
+
+	<!-- 文件读写 -->
+	<key>file-read-data</key>
+	<true/>
+	<key>user-preference-read</key>
+	<true/>
+	<key>user-preference-write</key>
+	<true/>
+</dict>
+</plist>

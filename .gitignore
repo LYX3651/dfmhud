@@ -1,0 +1,9 @@
+.theos/
+out/
+*.tipa
+build.log
+third_party/kfd/
+third_party_imgui/
+__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,64 @@
+name: build-tipa
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 安装 ldid
+        run: brew install ldid
+
+      - name: 拉 Theos
+        run: |
+          export THEOS=$HOME/theos
+          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          echo "THEOS=$THEOS" >> $GITHUB_ENV
+
+      - name: 拉 iOS SDK
+        run: |
+          git clone --depth 1 https://github.com/theos/sdks.git $THEOS/sdks || true
+          ls -1 $THEOS/sdks 2>/dev/null | head -20
+
+      - name: 拉 ImGui
+        run: |
+          git clone --depth 1 --branch v1.91.8 https://github.com/ocornut/imgui.git third_party_imgui
+          ls third_party_imgui/imgui.h third_party_imgui/backends/imgui_impl_metal.mm
+
+      - name: 环境自检
+        run: |
+          echo "--- theos ---"
+          ls $THEOS/makefiles/application.mk
+          echo "--- sdk ---"
+          ls $THEOS/sdks/ | grep -i iphoneos || echo "WARN: 无 SDK 目录"
+          echo "--- ldid ---"
+          ldid -v 2>&1 | head -2 || true
+
+      - name: 编译 + 签名 + 打包
+        run: |
+          chmod +x build.sh tools/pack_tipa.sh
+          ./build.sh 2>&1 | tee build.log
+
+      - name: 上传 tipa
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DFMHUD-tipa
+          path: DFMHUD.tipa
+          if-no-files-found: error
+
+      - name: 上传构建日志（失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
