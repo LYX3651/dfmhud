@@ -1,0 +1,23 @@
+name: probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo
+        run: |
+          echo "hello from ubuntu"
+          uname -a
+          python3 --version
+
+  macos-probe:
+    runs-on: macos-14
+    steps:
+      - name: echo
+        run: |
+          echo "hello from macos"
+          sw_vers
+          xcodebuild -version || true
