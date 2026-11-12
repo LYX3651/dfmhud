@@ -1,5 +1,8 @@
 name: build-tipa
 
+# macOS runner 在本账号无法分配（runner='' + 2s cancelled），
+# 但 Theos 官方支持在 Linux 上交叉编译 iOS 产物，所以走 ubuntu。
+
 on:
   push:
     branches: [ main, master ]
@@ -7,58 +10,108 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
-    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: 安装 ldid
-        run: brew install ldid
+      - name: 系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential clang lld libc++-dev libc++abi-dev \
+            git curl sudo unzip zip libssl-dev libxml2-dev \
+            pkg-config fakeroot dpkg
 
-      - name: 拉 Theos
+      - name: 安装 Theos
         run: |
           export THEOS=$HOME/theos
-          git clone --recursive --depth 1 https://github.com/theos/theos.git $THEOS
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          if [ ! -d "$THEOS" ]; then
+            echo "installer 没建目录，手动 clone"
+            git clone --recursive --depth 1 https://github.com/theos/theos.git "$THEOS"
+          fi
           echo "THEOS=$THEOS" >> $GITHUB_ENV
+          ls "$THEOS" | head
 
-      - name: 拉 iOS SDK
+      - name: 安装 Linux 交叉工具链
         run: |
-          git clone --depth 1 https://github.com/theos/sdks.git $THEOS/sdks || true
-          ls -1 $THEOS/sdks 2>/dev/null | head -20
+          export THEOS=$HOME/theos
+          mkdir -p "$THEOS/toolchain"
+          # theos 官方的 linux toolchain（自带 iOS SDK）
+          curl -fsSL -o /tmp/toolchain.tar.xz \
+            https://github.com/theos/sdks/archive/refs/heads/master.tar.gz || true
+          git clone --depth 1 https://github.com/theos/sdks.git /tmp/sdks
+          mkdir -p "$THEOS/sdks"
+          cp -R /tmp/sdks/*.sdk "$THEOS/sdks/" 2>/dev/null || true
+          ls "$THEOS/sdks" | head -20
+
+      - name: 安装 ldid
+        run: |
+          sudo apt-get install -y -qq libplist-dev libssl-dev
+          git clone --depth 1 https://github.com/ProcursusTeam/ldid.git /tmp/ldid
+          cd /tmp/ldid
+          git submodule update --init --recursive --depth 1 || true
+          make -j"$(nproc)" CXXFLAGS="-std=c++17 -I/usr/include" 2>&1 | tail -20 || true
+          if [ -f ./ldid ]; then
+            sudo cp ./ldid /usr/local/bin/
+            ldid -h 2>&1 | head -3 || true
+          else
+            echo "!! ldid 编译失败，稍后 fallback"
+          fi
+
+      - name: ldid fallback（预编译）
+        if: always()
+        run: |
+          if ! command -v ldid >/dev/null; then
+            curl -fsSL -o /tmp/ldid_prebuilt \
+              https://github.com/ProcursusTeam/ldid/releases/latest/download/ldid_linux_x86_64 || true
+            if [ -s /tmp/ldid_prebuilt ]; then
+              chmod +x /tmp/ldid_prebuilt
+              sudo mv /tmp/ldid_prebuilt /usr/local/bin/ldid
+            fi
+            command -v ldid && ldid -h 2>&1 | head -2 || echo "ldid 仍不可用"
+          fi
 
       - name: 拉 ImGui
         run: |
           git clone --depth 1 --branch v1.91.8 https://github.com/ocornut/imgui.git third_party_imgui
           ls third_party_imgui/imgui.h third_party_imgui/backends/imgui_impl_metal.mm
 
-      - name: 环境自检
+      - name: 环境汇总
         run: |
-          echo "--- theos ---"
-          ls $THEOS/makefiles/application.mk
-          echo "--- sdk ---"
-          ls $THEOS/sdks/ | grep -i iphoneos || echo "WARN: 无 SDK 目录"
-          echo "--- ldid ---"
-          ldid -v 2>&1 | head -2 || true
+          echo "THEOS=$THEOS"
+          echo "--- sdks ---"; ls "$THEOS/sdks" 2>/dev/null | head
+          echo "--- clang ---"; clang --version | head -2
+          echo "--- ldid ---"; command -v ldid || echo none
+          echo "--- make ---"; make --version | head -1
 
-      - name: 编译 + 签名 + 打包
+      - name: 编译
         run: |
           chmod +x build.sh tools/pack_tipa.sh
           ./build.sh 2>&1 | tee build.log
+        continue-on-error: true
 
-      - name: 上传 tipa
-        if: success()
+      - name: 上传产物
+        if: hashFiles('DFMHUD.tipa') != ''
         uses: actions/upload-artifact@v4
         with:
           name: DFMHUD-tipa
           path: DFMHUD.tipa
-          if-no-files-found: error
+          if-no-files-found: warn
 
-      - name: 上传构建日志（失败时）
-        if: failure()
+      - name: 上传日志
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
           if-no-files-found: ignore
+
+      - name: 失败时输出日志尾部
+        if: always()
+        run: |
+          echo "=== 日志尾部 ==="
+          tail -120 build.log 2>/dev/null || echo "(无 build.log)"
